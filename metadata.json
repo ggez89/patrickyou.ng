@@ -1,0 +1,6 @@
+{
+  "name": "patrickyou.ng",
+  "description": "Interactive landing page with optimized ASCII aurora simulations, sky painting, and hardware-accelerated cursor trails.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
