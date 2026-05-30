@@ -58,7 +58,7 @@
             text-shadow: 
                 5px 5px 0px #010204,
                 -5px -5px 0px #010204,
-                5px 5px 0px #010204,
+                5px -5px 0px #010204,
                 -5px 5px 0px #010204,
                 0px 5px 0px #010204,
                 0px -5px 0px #010204,
@@ -236,12 +236,14 @@
             const dy = clientY - mouse.lastStrokeY;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
+            const isMobile = window.innerWidth < 768;
+
             if (dist > 15 || paintStrokes.length === 0) {
                 strokeIdCounter += 1;
                 paintStrokes.push({
                     x: clientX,
                     y: clientY,
-                    radius: Math.random() * 60 + 110, // Gorgeous painting range
+                    radius: isMobile ? (Math.random() * 30 + 55) : (Math.random() * 60 + 110), // 50% smaller on mobile
                     intensity: 1.0,
                     decayRate: 0.014 + Math.random() * 0.008, // Fades gracefully
                     id: strokeIdCounter
@@ -311,7 +313,8 @@
             ctx.font = fontSize + "px monospace";
             ctx.textBaseline = "top";
 
-            time += 0.016; 
+            const isMobile = window.innerWidth < 768;
+            time += isMobile ? 0.008 : 0.016; 
 
             // Update strands and cull faded out items
             for (let i = strands.length - 1; i >= 0; i--) {
@@ -343,7 +346,6 @@
 
             // CORE SPATIAL BUCKETING OPTIMIZATION: Bounding Box caches
             const rowStrandCache = new Array(rows);
-            const isMobile = window.innerWidth < 768;
 
             for (let r = 0; r < rows; r++) {
                 const y = r * charHeight;
@@ -371,9 +373,9 @@
                     cached.push({
                         strandX: strandX,
                         width: currentWidth,
+                        alphaWeight: st.alpha * screenEdgeFade,
                         colMin: Math.max(0, Math.floor((strandX - currentWidth * 2.5 - 75) / charWidth)),
-                        colMax: Math.min(cols - 1, Math.ceil((strandX + currentWidth * 2.5 + 75) / charWidth)),
-                        alphaWeight: st.alpha * screenEdgeFade
+                        colMax: Math.min(cols - 1, Math.ceil((strandX + currentWidth * 2.5 + 75) / charWidth))
                     });
                 }
                 rowStrandCache[r] = cached;
@@ -469,24 +471,16 @@
                     let brightness = Math.max(rVal, gVal, bVal) / 255;
 
                     if (bluePaintVal > 0.02) {
+                        isActive = true; // Always paint trail characters and never leave black space gaps
+                        
                         const paintedR = (brightness * 255 * 0.0) + (bluePaintVal * 15);
                         const paintedG = (brightness * 255 * 0.72) + (bluePaintVal * 150);
                         const paintedB = (brightness * 255 * 1.0) + (bluePaintVal * 255);
 
-                        if (isActive) {
-                            rVal = rVal * (1.0 - bluePaintVal) + paintedR * bluePaintVal;
-                            gVal = gVal * (1.0 - bluePaintVal) + paintedG * bluePaintVal;
-                            bVal = bVal * (1.0 - bluePaintVal) + paintedB * bluePaintVal;
-                            brightness = Math.max(brightness, bluePaintVal * 0.4);
-                        } else if (bluePaintVal > 0.12) {
-                            // Sparkles in empty space
-                            const ambientFactor = bluePaintVal * 0.22;
-                            rVal = 8 * ambientFactor;
-                            gVal = 95 * ambientFactor;
-                            bVal = 255 * ambientFactor;
-                            brightness = ambientFactor;
-                            isActive = true;
-                        }
+                        rVal = rVal * (1.0 - bluePaintVal) + paintedR * bluePaintVal;
+                        gVal = gVal * (1.0 - bluePaintVal) + paintedG * bluePaintVal;
+                        bVal = bVal * (1.0 - bluePaintVal) + paintedB * bluePaintVal;
+                        brightness = Math.max(brightness, bluePaintVal * 0.65); // High brightness floor so trail stays strong and solid
                     }
 
                     if (!isActive || brightness < 0.016) continue;
@@ -528,15 +522,18 @@
                     const py = currentY - dy * ratio;
 
                     const colors = [
-                        'rgba(0, 255, 130, 0.8)', // Neon light green
-                        'rgba(0, 220, 255, 0.8)', // Cyan
-                        'rgba(50, 100, 255, 0.8)', // Electric blue
-                        'rgba(140, 50, 255, 0.8)', // Purple
+                        'rgba(255, 220, 0, 0.85)',   // Radiant Yellow
+                        'rgba(255, 110, 0, 0.85)',   // Vibrant Orange
+                        'rgba(255, 170, 40, 0.85)',  // Warm Amber
+                        'rgba(255, 255, 255, 0.95)', // Pure White
                     ];
                     const color = colors[Math.floor(Math.random() * colors.length)];
 
                     pIdCounter += 1;
-                    const size = Math.random() * 8 + 14; // Larger head size (14-22px)
+                    const isMobile = window.innerWidth < 768;
+                    const size = isMobile 
+                        ? (Math.random() * 4 + 7)  // 50% smaller on mobile (7-11px)
+                        : (Math.random() * 8 + 14); // Larger head size (14-22px) on desktop
 
                     // Create physical DOM element pre-styled
                     const element = document.createElement('div');
@@ -578,13 +575,14 @@
         // High frequency animation frame hook for GPU-based DOM transforms
         function updateTrail() {
             const nextParticles = [];
+            const isMobile = window.innerWidth < 768;
             
             for (let i = 0; i < activeParticles.length; i++) {
                 const p = activeParticles[i];
                 
                 // Rapid conical scale-down and opacity fade!
-                const nextOpacity = p.opacity - 0.055;
-                const nextScale = p.scale - 0.07;
+                const nextOpacity = p.opacity - (isMobile ? 0.025 : 0.055);
+                const nextScale = p.scale - (isMobile ? 0.035 : 0.07);
 
                 if (nextOpacity > 0 && nextScale > 0) {
                     const radian = (p.angle * Math.PI) / 180;
