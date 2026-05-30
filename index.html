@@ -1,13 +1,617 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>patrickyou.ng</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #010204; /* Pure dark night sky */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #ascii-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            display: block;
+        }
+
+        .container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            text-align: center;
+            pointer-events: none; 
+            width: 100%; 
+            padding: 0 1.5rem; 
+            user-select: none;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 3.3rem; 
+            letter-spacing: 0.45rem; 
+            text-transform: lowercase;
+            opacity: 1.0; 
+
+            /* Solid black silhouette mask to enforce text opacity on top of aurora strands */
+            text-shadow: 
+                5px 5px 0px #010204,
+                -5px -5px 0px #010204,
+                5px -5px 0px #010204,
+                -5px 5px 0px #010204,
+                0px 5px 0px #010204,
+                0px -5px 0px #010204,
+                5px 0px 0px #010204,
+                -5px 0px 0px #010204,
+                0px 0px 40px rgba(0, 255, 130, 0.5);
+
+            display: inline-block;
+            transform: scaleY(1.45); 
+            transform-origin: center;
+        }
+
+        /* Hardware-accelerated cursor trail styling container */
+        #trail-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 20;
+        }
+
+        .trail-particle {
+            position: absolute;
+            left: 0;
+            top: 0;
+            border-radius: 50%;
+            will-change: transform, opacity;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: clamp(1rem, 5.8vw, 1.65rem); 
+                letter-spacing: 0.15rem;
+                transform: scaleY(1.35); 
+                text-shadow: 
+                    3px 3px 0px #010204,
+                    -3px -3px 0px #010204,
+                    3px -3px 0px #010204,
+                    -3px 3px 0px #010204,
+                    0px 3px 0px #010204,
+                    0px -3px 0px #010204,
+                    3px 0px 0px #010204,
+                    -3px 0px 0px #010204,
+                    0px 0px 25px rgba(0, 255, 130, 0.5);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sky canvas layer -->
+    <canvas id="ascii-canvas"></canvas>
+
+    <!-- Perfectly aligned overlay text segment -->
+    <div class="container">
+        <h1>patrickyou.ng</h1>
+    </div>
+
+    <!-- Cursor trail hardware-accelerated overlay -->
+    <div id="trail-layer"></div>
+
+    <script>
+        /*=========================================
+         * 1. ULTRA-OPTIMIZED ASCII SKY PHYSICS
+         *========================================*/
+        const canvas = document.getElementById('ascii-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        const chars = " .-',:;+=*xX%#@&$";
+        const charLength = chars.length;
+
+        let fontSize = 11;
+        let charWidth = 10;
+        let charHeight = 11;
+        let cols, rows;
+        let time = 0;
+        let strands = [];
+        let paintStrokes = [];
+        let strokeIdCounter = 0;
+
+        let maxConcurrentStrands = 15;
+        let minThicknessFloor = 35;
+        let lateralSwayLarge = 160;
+        let lateralSwaySmall = 45;
+
+        let mouse = { x: 0, y: 0, easeX: 0, easeY: 0, lastStrokeX: 0, lastStrokeY: 0 };
+
+        class AuroraStrand {
+            constructor(initialAlive = false) {
+                this.baseX = -0.05 + Math.random() * 1.1; 
+                this.phaseOffset = Math.random() * 500;
+                this.speedFactor = 0.5 + Math.random() * 0.8;
+                this.thicknessScale = Math.pow(Math.random(), 1.5); 
+                
+                this.alpha = initialAlive ? 1.0 : 0.0;
+                this.targetAlpha = 1.0;
+                this.fadeSpeed = 0.001 + Math.random() * 0.003; 
+                
+                this.waveFreqY1 = 0.0015 + Math.random() * 0.0025;
+                this.waveFreqY2 = 0.006 + Math.random() * 0.006;
+            }
+
+            update() {
+                if (this.alpha < this.targetAlpha) {
+                    this.alpha += this.fadeSpeed;
+                    if (this.alpha > this.targetAlpha) this.alpha = this.targetAlpha;
+                } else if (this.alpha > this.targetAlpha) {
+                    this.alpha -= this.fadeSpeed;
+                    if (this.alpha < this.targetAlpha) this.alpha = this.targetAlpha;
+                }
+            }
+        }
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            const isMobile = window.innerWidth < 768;
+            
+            if (window.innerWidth >= 2560) {
+                fontSize = 18; 
+            } else if (window.innerWidth >= 1920) {
+                fontSize = 14;
+            } else if (window.innerWidth < 480) {
+                fontSize = 11;
+            } else {
+                fontSize = 12;
+            }
+
+            ctx.font = fontSize + "px monospace";
+            charWidth = ctx.measureText("M").width;
+            charHeight = fontSize * 1.1;
+
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            
+            // Limit high DPR for optimal layout performance on super retina devices
+            const targetDpr = Math.min(dpr, 1.5);
+            canvas.width = Math.floor(window.innerWidth * targetDpr);
+            canvas.height = Math.floor(window.innerHeight * targetDpr);
+            ctx.scale(targetDpr, targetDpr);
+            
+            cols = Math.ceil(window.innerWidth / charWidth);
+            rows = Math.ceil(window.innerHeight / charHeight);
+
+            if (isMobile) {
+                maxConcurrentStrands = 5;       
+                minThicknessFloor = 25; 
+                lateralSwayLarge = window.innerWidth * 0.18; 
+                lateralSwaySmall = window.innerWidth * 0.05;
+            } else {
+                maxConcurrentStrands = 15;      
+                minThicknessFloor = 35;         
+                lateralSwayLarge = 160;
+                lateralSwaySmall = 45;
+            }
+            
+            mouse.x = window.innerWidth * 0.5;
+            mouse.y = window.innerHeight * 0.5;
+            mouse.easeX = mouse.x;
+            mouse.easeY = mouse.y;
+            mouse.lastStrokeX = mouse.x;
+            mouse.lastStrokeY = mouse.y;
+        }
+
+        window.addEventListener('resize', resize);
+
+        function handleInputMove(clientX, clientY) {
+            mouse.x = clientX;
+            mouse.y = clientY;
+
+            // Track movement delta to append paint blocks
+            const dx = clientX - mouse.lastStrokeX;
+            const dy = clientY - mouse.lastStrokeY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > 15 || paintStrokes.length === 0) {
+                strokeIdCounter += 1;
+                paintStrokes.push({
+                    x: clientX,
+                    y: clientY,
+                    radius: Math.random() * 60 + 110, // Gorgeous painting range
+                    intensity: 1.0,
+                    decayRate: 0.014 + Math.random() * 0.008, // Fades gracefully
+                    id: strokeIdCounter
+                });
+
+                if (paintStrokes.length > 30) {
+                    paintStrokes.shift();
+                }
+
+                mouse.lastStrokeX = clientX;
+                mouse.lastStrokeY = clientY;
+            }
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            handleInputMove(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if(e.touches.length > 0) {
+                handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+
+        // Initialize active strands list
+        for (let i = 0; i < 5; i++) {
+            strands.push(new AuroraStrand(true));
+        }
+
+        resize();
+
+        function draw() {
+            // Smooth cursor tracking values
+            mouse.easeX += (mouse.x - mouse.easeX) * 0.055;
+            mouse.easeY += (mouse.y - mouse.easeY) * 0.055;
+
+            // Render dark void
+            ctx.fillStyle = '#010204';
+            ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+            // Draw glowing radial blue backgrounds along paint trail for beautiful underlying sky painting
+            if (paintStrokes.length > 0) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'screen';
+                
+                for (let i = 0; i < paintStrokes.length; i++) {
+                    const stroke = paintStrokes[i];
+                    if (stroke.intensity <= 0.01) continue;
+
+                    const grad = ctx.createRadialGradient(
+                        stroke.x, stroke.y, 5,
+                        stroke.x, stroke.y, stroke.radius
+                    );
+                    
+                    grad.addColorStop(0, `rgba(12, 60, 240, ${stroke.intensity * 0.32})`);
+                    grad.addColorStop(0.4, `rgba(4, 25, 140, ${stroke.intensity * 0.14})`);
+                    grad.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(stroke.x, stroke.y, stroke.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+            
+            ctx.font = fontSize + "px monospace";
+            ctx.textBaseline = "top";
+
+            time += 0.016; 
+
+            // Update strands and cull faded out items
+            for (let i = strands.length - 1; i >= 0; i--) {
+                strands[i].update();
+                if (strands[i].targetAlpha === 0 && strands[i].alpha <= 0.001) {
+                    strands.splice(i, 1);
+                }
+            }
+
+            // Update user paint strokes
+            for (let i = paintStrokes.length - 1; i >= 0; i--) {
+                paintStrokes[i].intensity -= paintStrokes[i].decayRate;
+                if (paintStrokes[i].intensity <= 0) {
+                    paintStrokes.splice(i, 1);
+                }
+            }
+
+            // Spawn or target strands organically
+            if (Math.random() < 0.02) {
+                const livingCount = strands.filter(s => s.targetAlpha === 1.0).length;
+                if (livingCount < maxConcurrentStrands && (Math.random() > 0.3 || livingCount <= 2)) {
+                    strands.push(new AuroraStrand(false)); 
+                } else if (livingCount > 3) {
+                    const activeStrands = strands.filter(s => s.targetAlpha === 1.0);
+                    const victim = activeStrands[Math.floor(Math.random() * activeStrands.length)];
+                    if (victim) victim.targetAlpha = 0.0; 
+                }
+            }
+
+            // CORE SPATIAL BUCKETING OPTIMIZATION: Bounding Box caches
+            const rowStrandCache = new Array(rows);
+            const isMobile = window.innerWidth < 768;
+
+            for (let r = 0; r < rows; r++) {
+                const y = r * charHeight;
+                const cached = [];
+                const screenEdgeFade = Math.pow(Math.sin((y / window.innerHeight) * Math.PI), 0.3);
+
+                for (let s = 0; s < strands.length; s++) {
+                    const st = strands[s];
+                    if (st.alpha <= 0.005) continue;
+
+                    let strandX = window.innerWidth * st.baseX
+                                  + Math.sin(y * st.waveFreqY1 + time * 1.5 * st.speedFactor + st.phaseOffset) * lateralSwayLarge
+                                  + Math.cos(y * st.waveFreqY2 - time * 0.7 * st.speedFactor) * lateralSwaySmall;
+
+                    let baseThickness = isMobile 
+                                        ? (32 + st.thicknessScale * 75) 
+                                        : (48 + st.thicknessScale * 180);
+
+                    let currentWidth = baseThickness 
+                                       + Math.sin(y * 0.006 + time * 1.8 + st.phaseOffset) * (baseThickness * 0.4)
+                                       + Math.cos(y * 0.015 - time * 1.1) * (baseThickness * 0.15);
+                    
+                    currentWidth = Math.max(minThicknessFloor, currentWidth);
+
+                    cached.push({
+                        strandX: strandX,
+                        width: currentWidth,
+                        alphaWeight: st.alpha * screenEdgeFade,
+                        colMin: Math.max(0, Math.floor((strandX - currentWidth * 2.5 - 75) / charWidth)),
+                        colMax: Math.min(cols - 1, Math.ceil((strandX + currentWidth * 2.5 + 75) / charWidth))
+                    });
+                }
+                rowStrandCache[r] = cached;
+            }
+
+            // Create flat spatial grids to hold values
+            const rValGrid = new Float32Array(cols * rows);
+            const gValGrid = new Float32Array(cols * rows);
+            const bValGrid = new Float32Array(cols * rows);
+            const activePixelsMap = new Uint8Array(cols * rows);
+
+            for (let r = 0; r < rows; r++) {
+                const y = r * charHeight;
+                const activeRowStrands = rowStrandCache[r];
+                if (activeRowStrands.length === 0) continue;
+
+                for (let s = 0; s < activeRowStrands.length; s++) {
+                    const rStrand = activeRowStrands[s];
+
+                    for (let c = rStrand.colMin; c <= rStrand.colMax; c++) {
+                        const x = c * charWidth;
+                        const gridIdx = r * cols + c;
+
+                        let mDx = x - mouse.easeX;
+                        let mDy = y - mouse.easeY;
+                        const mDistSq = mDx * mDx + mDy * mDy;
+                        
+                        let evalX = x;
+
+                        if (mDistSq < 122500) { 
+                            const mDist = Math.sqrt(mDistSq); 
+                            const power = (1.0 - mDist / 350);
+                            evalX += Math.sin(time * 1.2 + y * 0.01) * power * power * 70;
+                        }
+
+                        const dX = Math.abs(evalX - rStrand.strandX);
+                        if (dX > rStrand.width * 2.5) continue; 
+
+                        const inverseRadius = 1.0 / rStrand.width;
+                        const normalizedDx = dX * inverseRadius;
+                        let intensity = Math.exp(-(normalizedDx * normalizedDx)) * rStrand.alphaWeight;
+                        if (intensity < 0.005) continue;
+
+                        let greenCoreWidth = rStrand.width * 0.48;
+                        const inverseGreenCore = 1.0 / greenCoreWidth;
+                        const normalizedCoreDx = dX * inverseGreenCore;
+                        let coreGreen = Math.exp(-(normalizedCoreDx * normalizedCoreDx)) * intensity;
+                        
+                        let fringePurple = Math.max(0, intensity - coreGreen) * 0.38;
+
+                        rValGrid[gridIdx] += (coreGreen * 8)   + (fringePurple * 245);
+                        gValGrid[gridIdx] += (coreGreen * 255) + (fringePurple * 15);
+                        bValGrid[gridIdx] += (coreGreen * 115) + (fringePurple * 215);
+
+                        activePixelsMap[gridIdx] = 1;
+                    }
+                }
+            }
+
+            // Draw chars to screen
+            const hasStrokes = paintStrokes.length > 0;
+            const listStrokes = paintStrokes;
+
+            for (let r = 0; r < rows; r++) {
+                const y = r * charHeight;
+
+                for (let c = 0; c < cols; c++) {
+                    const x = c * charWidth;
+                    const gridIdx = r * cols + c;
+
+                    let rVal = rValGrid[gridIdx];
+                    let gVal = gValGrid[gridIdx];
+                    let bVal = bValGrid[gridIdx];
+                    let isActive = activePixelsMap[gridIdx] === 1;
+
+                    // Compute dynamic blue painting sky factor at page coordinates
+                    let bluePaintVal = 0;
+                    if (hasStrokes) {
+                        for (let p = 0; p < listStrokes.length; p++) {
+                            const strk = listStrokes[p];
+                            const dX = x - strk.x;
+                            const dY = y - strk.y;
+                            const distSq = dX * dX + dY * dY;
+                            const rSq = strk.radius * strk.radius;
+                            if (distSq < rSq) {
+                                const dist = Math.sqrt(distSq);
+                                bluePaintVal += (1.0 - dist / strk.radius) * strk.intensity;
+                            }
+                        }
+                        bluePaintVal = Math.min(1.0, bluePaintVal);
+                    }
+
+                    let brightness = Math.max(rVal, gVal, bVal) / 255;
+
+                    if (bluePaintVal > 0.02) {
+                        const paintedR = (brightness * 255 * 0.0) + (bluePaintVal * 15);
+                        const paintedG = (brightness * 255 * 0.72) + (bluePaintVal * 150);
+                        const paintedB = (brightness * 255 * 1.0) + (bluePaintVal * 255);
+
+                        if (isActive) {
+                            rVal = rVal * (1.0 - bluePaintVal) + paintedR * bluePaintVal;
+                            gVal = gVal * (1.0 - bluePaintVal) + paintedG * bluePaintVal;
+                            bVal = bVal * (1.0 - bluePaintVal) + paintedB * bluePaintVal;
+                            brightness = Math.max(brightness, bluePaintVal * 0.4);
+                        } else if (bluePaintVal > 0.12) {
+                            // Sparkles in empty space
+                            const ambientFactor = bluePaintVal * 0.22;
+                            rVal = 8 * ambientFactor;
+                            gVal = 95 * ambientFactor;
+                            bVal = 255 * ambientFactor;
+                            brightness = ambientFactor;
+                            isActive = true;
+                        }
+                    }
+
+                    if (!isActive || brightness < 0.016) continue;
+
+                    let charIdx = Math.floor(Math.min(0.99, brightness) * charLength);
+                    const char = chars[charIdx];
+
+                    ctx.fillStyle = `rgb(${Math.min(255, Math.floor(rVal))}, ${Math.min(255, Math.floor(gVal))}, ${Math.min(255, Math.floor(bVal))})`;
+                    ctx.fillText(char, x, y);
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        requestAnimationFrame(draw);
+
+
+        /*=========================================
+         * 2. SHARP CONICAL CURSOR TRAIL ENGINE (GPU)
+         *========================================*/
+        const trailLayer = document.getElementById('trail-layer');
+        let activeParticles = [];
+        let pIdCounter = 0;
+        let lastPos = { x: 0, y: 0 };
+
+        function spawnParticles(currentX, currentY) {
+            const dx = currentX - lastPos.x;
+            const dy = currentY - lastPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            lastPos = { x: currentX, y: currentY };
+
+            if (dist > 3) {
+                const count = Math.min(3, Math.floor(dist / 10) + 1);
+                for (let i = 0; i < count; i++) {
+                    const ratio = i / count;
+                    const px = currentX - dx * ratio;
+                    const py = currentY - dy * ratio;
+
+                    const colors = [
+                        'rgba(0, 255, 130, 0.8)', // Neon light green
+                        'rgba(0, 220, 255, 0.8)', // Cyan
+                        'rgba(50, 100, 255, 0.8)', // Electric blue
+                        'rgba(140, 50, 255, 0.8)', // Purple
+                    ];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+
+                    pIdCounter += 1;
+                    const size = Math.random() * 8 + 14; // Larger head size (14-22px)
+
+                    // Create physical DOM element pre-styled
+                    const element = document.createElement('div');
+                    element.className = 'trail-particle';
+                    element.style.width = size + 'px';
+                    element.style.height = size + 'px';
+                    element.style.backgroundColor = color;
+                    element.style.boxShadow = `0 0 10px ${color}`;
+                    element.style.transform = `translate3d(${px - size / 2}px, ${py - size / 2}px, 0) scale(1)`;
+                    element.style.opacity = '1';
+
+                    trailLayer.appendChild(element);
+
+                    activeParticles.push({
+                        element: element,
+                        x: px,
+                        y: py,
+                        size: size,
+                        color: color,
+                        angle: Math.random() * 360,
+                        speed: Math.random() * 1.0 + 0.2, // Slower translation vector ensures sharp cone structure
+                        opacity: 1,
+                        scale: 1
+                    });
+                }
+            }
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            spawnParticles(e.clientX, e.clientY);
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                spawnParticles(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+
+        // High frequency animation frame hook for GPU-based DOM transforms
+        function updateTrail() {
+            const nextParticles = [];
+            
+            for (let i = 0; i < activeParticles.length; i++) {
+                const p = activeParticles[i];
+                
+                // Rapid conical scale-down and opacity fade!
+                const nextOpacity = p.opacity - 0.055;
+                const nextScale = p.scale - 0.07;
+
+                if (nextOpacity > 0 && nextScale > 0) {
+                    const radian = (p.angle * Math.PI) / 180;
+                    p.x += Math.cos(radian) * p.speed * 0.4;
+                    p.y += Math.sin(radian) * p.speed * 0.4 + 0.2; // Tiny drift
+
+                    p.opacity = nextOpacity;
+                    p.scale = nextScale;
+
+                    // Commit changes instantly on GPU via layer translate3d
+                    p.element.style.transform = `translate3d(${p.x - p.size / 2}px, ${p.y - p.size / 2}px, 0) scale(${p.scale})`;
+                    p.element.style.opacity = p.opacity;
+
+                    nextParticles.push(p);
+                } else {
+                    // Dispose DOM element to prevent memory leaks or DOM bloating
+                    if (p.element && p.element.parentNode) {
+                        p.element.parentNode.removeChild(p.element);
+                    }
+                }
+            }
+
+            activeParticles = nextParticles;
+            requestAnimationFrame(updateTrail);
+        }
+
+        requestAnimationFrame(updateTrail);
+    </script>
+</body>
+</html>
