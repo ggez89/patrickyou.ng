@@ -58,7 +58,7 @@
             text-shadow: 
                 5px 5px 0px #010204,
                 -5px -5px 0px #010204,
-                5px -5px 0px #010204,
+                5px 5px 0px #010204,
                 -5px 5px 0px #010204,
                 0px 5px 0px #010204,
                 0px -5px 0px #010204,
@@ -371,9 +371,9 @@
                     cached.push({
                         strandX: strandX,
                         width: currentWidth,
-                        alphaWeight: st.alpha * screenEdgeFade,
                         colMin: Math.max(0, Math.floor((strandX - currentWidth * 2.5 - 75) / charWidth)),
-                        colMax: Math.min(cols - 1, Math.ceil((strandX + currentWidth * 2.5 + 75) / charWidth))
+                        colMax: Math.min(cols - 1, Math.ceil((strandX + currentWidth * 2.5 + 75) / charWidth)),
+                        alphaWeight: st.alpha * screenEdgeFade
                     });
                 }
                 rowStrandCache[r] = cached;
